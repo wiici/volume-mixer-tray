@@ -1,4 +1,6 @@
+use crate::windows_utils::{get_hwnd_from_pid, get_pid_by_name, run_exec, WindowsHandle};
 use core::time;
+use log::{info, warn};
 use std::env;
 use std::path::PathBuf;
 use windows::Win32::Foundation::HWND;
@@ -7,8 +9,6 @@ use windows::Win32::System::Threading::{
     TerminateProcess, STARTF_PREVENTPINNING, STARTF_USESHOWWINDOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
-
-use crate::windows_utils::{get_hwnd_from_pid, get_pid_by_name, run_exec, WindowsHandle};
 
 #[derive(Default)]
 pub struct VolumeMixerProcess {
@@ -62,10 +62,10 @@ impl VolumeMixerProcess {
 
         let exec_path = Self::construct_volume_mixer_exec_path();
 
-        let (pid, hprocess) = run_exec(exec_path.as_path(), &startup_info).unwrap();
+        let (pid, hprocess) = run_exec(exec_path.as_path(), &startup_info)?;
 
         // Give OS some time when trying to get HWND
-        let hwnd = Self::try_get_hwnd_from_pid(pid).unwrap();
+        let hwnd = Self::try_get_hwnd_from_pid(pid)?;
 
         Ok(VolumeMixerProcess {
             pid,
@@ -105,9 +105,9 @@ impl Drop for VolumeMixerProcess {
     fn drop(&mut self) {
         unsafe {
             if let Err(err) = TerminateProcess(self.hprocess.as_raw_handle(), 0).ok() {
-                println!("TerminateProcess failed: {}", err);
+                warn!("TerminateProcess failed: {}", err);
             }
         }
-        println!("Terminate volume mixer process");
+        info!("Terminate Volume Mixer process");
     }
 }

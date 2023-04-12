@@ -1,3 +1,4 @@
+use log::{debug, error};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use windows::core::Error;
@@ -103,7 +104,7 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     unsafe {
         let result = GetWindowThreadProcessId(hwnd, Some(&mut hwnd_pid));
         if result == 0 {
-            println!(
+            error!(
                 "Failed to call GetWindowThreadProcessId. Windows error: {}",
                 Error::from_win32()
             );
@@ -160,8 +161,8 @@ pub fn run_exec(
         );
 
         if process_result.as_bool() {
-            println!(
-                "Run process (pid {}) \"{}\"",
+            debug!(
+                "Run exec (pid {}) \"{}\"",
                 process_info.dwProcessId,
                 exec_path.display()
             );
