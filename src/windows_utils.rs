@@ -167,7 +167,8 @@ pub fn run_exec(
     startup_info: &STARTUPINFOW,
 ) -> Result<(u32, WindowsHandle), String> {
     let mut process_info = PROCESS_INFORMATION::default();
-    let mut utf16_exec_path: Vec<u16> = exec_path.as_os_str().encode_wide().collect();
+    let mut utf16_exec_path: Vec<u16> =
+        exec_path.as_os_str().encode_wide().chain(Some(0)).collect();
 
     unsafe {
         let process_result = CreateProcessW(
