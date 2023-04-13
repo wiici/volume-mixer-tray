@@ -1,4 +1,6 @@
-use crate::windows_utils::{get_hwnd_from_pid, get_pid_by_name, run_exec, WindowsHandle};
+use crate::windows_utils::{
+    find_window_by_pattern_in_title, get_pid_by_name, run_exec, WindowsHandle,
+};
 use core::time;
 use log::{info, warn};
 use std::env;
@@ -38,7 +40,7 @@ impl VolumeMixerProcess {
 
     fn from_running_process() -> Result<VolumeMixerProcess, String> {
         if let Some(pid) = get_pid_by_name(Self::VOLUME_MIXER_EXEC_NAME).unwrap() {
-            let hwnd = get_hwnd_from_pid(pid).unwrap();
+            let hwnd = Self::try_find_volume_mixer_window(pid)?;
 
             Ok(VolumeMixerProcess {
                 pid,
@@ -64,8 +66,7 @@ impl VolumeMixerProcess {
 
         let (pid, hprocess) = run_exec(exec_path.as_path(), &startup_info)?;
 
-        // Give OS some time when trying to get HWND
-        let hwnd = Self::try_get_hwnd_from_pid(pid)?;
+        let hwnd = Self::try_find_volume_mixer_window(pid)?;
 
         Ok(VolumeMixerProcess {
             pid,
@@ -74,16 +75,19 @@ impl VolumeMixerProcess {
         })
     }
 
-    fn try_get_hwnd_from_pid(pid: u32) -> Result<HWND, String> {
+    fn try_find_volume_mixer_window(pid: u32) -> Result<HWND, String> {
+        // Give OS some time when trying to get HWND
+        // just after creating a process.
+        let window_title_pattern = "Volume Mixer";
         for _ in 0..4 {
-            if let Ok(hwnd) = get_hwnd_from_pid(pid) {
+            if let Ok(hwnd) = find_window_by_pattern_in_title(window_title_pattern, pid) {
                 return Ok(hwnd);
             } else {
                 std::thread::sleep(time::Duration::from_millis(250));
             }
         }
 
-        get_hwnd_from_pid(pid)
+        find_window_by_pattern_in_title(window_title_pattern, pid)
     }
 
     fn construct_volume_mixer_exec_path() -> PathBuf {

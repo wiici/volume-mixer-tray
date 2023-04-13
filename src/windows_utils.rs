@@ -1,11 +1,12 @@
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
+
 use windows::core::Error;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
-    CloseHandle, BOOL, ERROR_NO_MORE_FILES, FALSE, HANDLE, HWND, INVALID_HANDLE_VALUE, LPARAM,
-    TRUE, WIN32_ERROR,
+    CloseHandle, SetLastError, BOOL, ERROR_NO_MORE_FILES, ERROR_SUCCESS, FALSE, HANDLE, HWND,
+    INVALID_HANDLE_VALUE, LPARAM, TRUE, WIN32_ERROR,
 };
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
@@ -13,7 +14,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 use windows::Win32::System::Threading::{
     CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW,
 };
-use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, WNDENUMPROC};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetWindowTextA, GetWindowThreadProcessId, WNDENUMPROC,
+};
 
 pub struct WindowsHandle {
     handle: HANDLE,
@@ -93,18 +96,19 @@ pub fn get_pid_by_name(proc_name: &str) -> Result<Option<u32>, String> {
 
 #[derive(Default)]
 struct EnumProcUserData {
-    pid: u32,
-    hwnd: HWND,
+    looking_pid: u32,
+    title_pattern: String,
+    found_hwnd: Option<HWND>,
 }
 
-unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+unsafe extern "system" fn enum_windows_proc(curr_hwnd: HWND, lparam: LPARAM) -> BOOL {
     let mut user_data = (lparam.0 as *mut EnumProcUserData).as_mut().unwrap();
-    let mut hwnd_pid: u32 = 0;
+    let mut curr_hwnd_pid: u32 = 0;
 
     unsafe {
-        let result = GetWindowThreadProcessId(hwnd, Some(&mut hwnd_pid));
+        let result = GetWindowThreadProcessId(curr_hwnd, Some(&mut curr_hwnd_pid));
         if result == 0 {
-            error!(
+            warn!(
                 "Failed to call GetWindowThreadProcessId. Windows error: {}",
                 Error::from_win32()
             );
@@ -113,29 +117,48 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
         }
     }
 
-    if hwnd_pid == user_data.pid {
-        user_data.hwnd = hwnd;
+    let mut window_text_buf: [u8; 256] = [0; 256];
+    let ret_buf_len = GetWindowTextA(curr_hwnd, window_text_buf.as_mut());
+    if ret_buf_len == 0 {
+        warn!("Failed to get window text: {}", Error::from_win32());
+    }
+    let curr_window_title = std::str::from_utf8(window_text_buf.as_slice()).unwrap_or("<unknown>");
+
+    if curr_hwnd_pid == user_data.looking_pid
+        && curr_window_title.contains(user_data.title_pattern.as_str())
+    {
+        user_data.found_hwnd = Some(curr_hwnd);
+        SetLastError(ERROR_SUCCESS);
         FALSE
     } else {
         TRUE
     }
 }
 
-pub fn get_hwnd_from_pid(pid: u32) -> Result<HWND, String> {
+pub fn find_window_by_pattern_in_title(
+    pattern: &str,
+    looking_window_owner_pid: u32,
+) -> Result<HWND, String> {
     let mut user_data = EnumProcUserData {
-        pid,
-        hwnd: HWND::default(),
+        looking_pid: looking_window_owner_pid,
+        found_hwnd: None,
+        title_pattern: pattern.to_string(),
     };
     let lparam = LPARAM(&mut user_data as *mut EnumProcUserData as isize);
 
-    unsafe {
-        EnumWindows(WNDENUMPROC::Some(enum_proc), lparam);
-    }
+    let enum_result = unsafe { EnumWindows(WNDENUMPROC::Some(enum_windows_proc), lparam) };
 
-    if user_data.hwnd != HWND::default() {
-        Ok(user_data.hwnd)
+    if let Err(err) = enum_result.ok() {
+        if err.code() == ERROR_SUCCESS.to_hresult() {
+            Ok(user_data.found_hwnd.expect("In this case window handle HWND should be set. Check callback function passed to EnumWindows"))
+        } else {
+            Err(format!("EnumWindows failed: {}", err))
+        }
     } else {
-        Err(format!("Cannot get HWND for pid {}", pid))
+        Err(format!(
+            "Could not find window title with pattern \"{}\" owned by pid {}",
+            pattern, looking_window_owner_pid
+        ))
     }
 }
 
