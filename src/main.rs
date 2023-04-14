@@ -5,8 +5,10 @@ mod windows_utils;
 
 use crate::volume_mixer_tray_icon::VolumeMixerTrayIcon;
 use crate::volume_mixer_tray_icon::PROP_VOLUME_MIXER_HWND;
+use crate::windows_utils::ExtendPCWSTR;
 use env_logger::Builder;
-use log::info;
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
 use message_only_window::MessageOnlyWindow;
 use std::io::Write;
 use volume_mixer_process::VolumeMixerProcess;
@@ -28,26 +30,17 @@ fn main() -> Result<(), String> {
     )?;
     info!("Create hidden message-only window");
 
-    let utf16_prop_name = PCWSTR::from_raw(
-        PROP_VOLUME_MIXER_HWND
-            .encode_utf16()
-            .collect::<Vec<u16>>()
-            .as_ptr(),
-    );
     let set_prop_result = unsafe {
         SetPropW(
             msg_only_window.hwnd,
-            utf16_prop_name,
-            HANDLE {
-                0: volume_mixer_process.hwnd.0,
-            },
+            PCWSTR::from_str(PROP_VOLUME_MIXER_HWND),
+            HANDLE(volume_mixer_process.hwnd.0),
         )
     };
     if let Err(err) = set_prop_result.ok() {
         return Err(format!(
-            "RemovePropA failed for {}: {}",
-            unsafe { utf16_prop_name.display() },
-            err
+            "SetPropW failed for \"{}\": {}",
+            PROP_VOLUME_MIXER_HWND, err
         ));
     }
 
@@ -66,21 +59,25 @@ fn main() -> Result<(), String> {
         }
     }
 
-    let result_handle = unsafe { RemovePropW(msg_only_window.hwnd, utf16_prop_name) };
-
-    if result_handle.is_err() {
-        return Err(format!(
-            "RemovePropA failed for {}: {}",
-            unsafe { utf16_prop_name.display() },
+    let remove_prop_result = unsafe {
+        RemovePropW(
+            msg_only_window.hwnd,
+            PCWSTR::from_str(PROP_VOLUME_MIXER_HWND),
+        )
+    };
+    if remove_prop_result.is_err() {
+        error!(
+            "RemovePropW failed for \"{}\": {}",
+            PROP_VOLUME_MIXER_HWND,
             Error::from_win32()
-        ));
+        );
     }
 
     Ok(())
 }
 
 fn init_logger() {
-    let _ = Builder::from_default_env()
+    Builder::from_default_env()
         .format(|buf, record| {
             let style = buf.default_level_style(record.level());
 
@@ -95,5 +92,5 @@ fn init_logger() {
             )
         })
         .format_timestamp_millis()
-        .init();
+        .init()
 }

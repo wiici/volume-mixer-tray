@@ -1,4 +1,6 @@
-use log::{debug, warn};
+use crate::windows_utils::ExtendPCWSTR;
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
 use windows::core::{Error, PCWSTR};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -15,13 +17,13 @@ pub struct MessageOnlyWindow {
 impl MessageOnlyWindow {
     pub fn new(window_class_name: &str, wnd_proc: &WNDPROC) -> Result<MessageOnlyWindow, String> {
         let hinstance = { unsafe { GetModuleHandleW(PCWSTR::null()).unwrap() } };
-        let utf16_class_name: Vec<u16> = window_class_name.encode_utf16().collect();
+        let utf16_class_name = PCWSTR::from_str(window_class_name);
 
         let window_class = WNDCLASSW {
             style: CS_VREDRAW,
             lpfnWndProc: wnd_proc.to_owned(),
             hInstance: hinstance,
-            lpszClassName: PCWSTR::from_raw(utf16_class_name.as_ptr()),
+            lpszClassName: utf16_class_name,
 
             ..Default::default()
         };
@@ -37,7 +39,7 @@ impl MessageOnlyWindow {
             unsafe {
                 CreateWindowExW(
                     WINDOW_EX_STYLE::default(),
-                    PCWSTR::from_raw(utf16_class_name.as_ptr()),
+                    utf16_class_name,
                     PCWSTR::null(),
                     WS_MINIMIZE,
                     CW_USEDEFAULT,

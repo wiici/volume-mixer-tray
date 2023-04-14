@@ -1,5 +1,6 @@
-use log::{error, info, warn};
-
+use crate::windows_utils::ExtendPCWSTR;
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
 use windows::core::{Error, PCWSTR};
 use windows::Win32::Foundation::{HANDLE, HMODULE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Shell::{
@@ -10,7 +11,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     ShowWindow, IDI_APPLICATION, SW_HIDE, SW_SHOW, WM_APP, WM_LBUTTONDOWN, WM_RBUTTONDOWN,
 };
 
-pub const PROP_VOLUME_MIXER_HWND: &'static str = "PROP_VOLUME_MIXER_HWND";
+pub const PROP_VOLUME_MIXER_HWND: &str = "PROP_VOLUME_MIXER_HWND";
 
 #[derive(Default)]
 pub struct VolumeMixerTrayIcon {
@@ -67,12 +68,7 @@ impl VolumeMixerTrayIcon {
     }
 
     fn on_left_mouse_pressed(hwnd: HWND) {
-        let utf16_prop_name = PCWSTR::from_raw(
-            PROP_VOLUME_MIXER_HWND
-                .encode_utf16()
-                .collect::<Vec<u16>>()
-                .as_ptr(),
-        );
+        let utf16_prop_name = PCWSTR::from_str(PROP_VOLUME_MIXER_HWND);
         let data: HANDLE = { unsafe { GetPropW(hwnd, utf16_prop_name) } };
 
         if data.is_invalid() {
@@ -85,7 +81,7 @@ impl VolumeMixerTrayIcon {
             return;
         }
 
-        let volume_mixer_hwnd = HWND { 0: data.0 };
+        let volume_mixer_hwnd = HWND(data.0);
         let is_visible = unsafe { IsWindowVisible(volume_mixer_hwnd).as_bool() };
         let show_cmd = {
             if is_visible {

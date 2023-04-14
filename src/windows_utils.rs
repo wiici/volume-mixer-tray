@@ -1,4 +1,5 @@
-use log::{debug, warn};
+#[allow(unused_imports)]
+use log::{debug, error, info, trace, warn};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
@@ -52,6 +53,21 @@ impl Drop for WindowsHandle {
                 CloseHandle(self.handle).ok().unwrap();
             }
         }
+    }
+}
+
+pub trait ExtendPCWSTR {
+    fn from_str(str: &str) -> PCWSTR;
+}
+
+impl ExtendPCWSTR for PCWSTR {
+    fn from_str(str: &str) -> PCWSTR {
+        PCWSTR::from_raw(
+            str.encode_utf16()
+                .chain(Some(0))
+                .collect::<Vec<u16>>()
+                .as_ptr(),
+        )
     }
 }
 
