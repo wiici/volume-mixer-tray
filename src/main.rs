@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 mod message_only_window;
 mod volume_mixer_process;
 mod volume_mixer_tray_icon;
