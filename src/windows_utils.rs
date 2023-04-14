@@ -1,9 +1,8 @@
-use log::{debug, error, warn};
+use log::{debug, warn};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
-use windows::core::Error;
-use windows::core::{PCWSTR, PWSTR};
+use windows::core::{Error, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
     CloseHandle, SetLastError, BOOL, ERROR_NO_MORE_FILES, ERROR_SUCCESS, FALSE, HANDLE, HWND,
     INVALID_HANDLE_VALUE, LPARAM, TRUE, WIN32_ERROR,

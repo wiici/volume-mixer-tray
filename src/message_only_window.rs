@@ -1,17 +1,15 @@
 use log::{debug, warn};
-use windows::core::Error;
-use windows::core::PCWSTR;
+use windows::core::{Error, PCWSTR};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::WNDCLASSW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, RegisterClassW, CS_VREDRAW, CW_USEDEFAULT, HMENU, HWND_MESSAGE,
-    WINDOW_EX_STYLE, WNDPROC, WS_MINIMIZE,
+    WINDOW_EX_STYLE, WNDCLASSW, WNDPROC, WS_MINIMIZE,
 };
 
 #[derive(Default)]
 pub struct MessageOnlyWindow {
-    hwnd: HWND,
+    pub hwnd: HWND,
 }
 
 impl MessageOnlyWindow {
@@ -65,10 +63,10 @@ impl MessageOnlyWindow {
 impl Drop for MessageOnlyWindow {
     fn drop(&mut self) {
         let result = { unsafe { DestroyWindow(self.hwnd) } };
-        if result.as_bool() {
-            debug!("Destroy message-only window");
+        if let Err(err) = result.ok() {
+            warn!("DestroyWindow failed: {}", err);
         } else {
-            warn!("DestroyWindow failed: {}", Error::from_win32());
+            debug!("Destroy message-only window");
         }
     }
 }
