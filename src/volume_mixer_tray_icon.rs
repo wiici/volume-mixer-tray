@@ -1,14 +1,17 @@
+use std::ffi::c_void;
 use crate::windows_utils::ExtendPCWSTR;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use windows::core::{Error, PCWSTR};
-use windows::Win32::Foundation::{HANDLE, HMODULE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{FALSE, HANDLE, HMODULE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconA, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAA,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, GetPropW, IsWindowVisible, LoadIconW, PostQuitMessage, SetForegroundWindow,
-    ShowWindow, IDI_APPLICATION, SW_HIDE, SW_SHOW, WM_APP, WM_LBUTTONDOWN, WM_RBUTTONDOWN,
+    DefWindowProcW, GetPropW, GetWindowRect, IsWindowVisible, LoadIconW, MoveWindow,
+    PostQuitMessage, SetForegroundWindow, ShowWindow, SystemParametersInfoA, IDI_APPLICATION,
+    SPI_GETWORKAREA, SW_HIDE, SW_SHOW, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WM_APP, WM_LBUTTONDOWN,
+    WM_RBUTTONDOWN,
 };
 
 pub const PROP_VOLUME_MIXER_HWND: &str = "PROP_VOLUME_MIXER_HWND";
@@ -87,6 +90,10 @@ impl VolumeMixerTrayIcon {
             if is_visible {
                 SW_HIDE
             } else {
+                if let Err(err_str) = Self::move_window_to_right_bottom_corner(volume_mixer_hwnd) {
+                    error!("Failed to move volume mixer window. Reason: {}", err_str);
+                }
+
                 SW_SHOW
             }
         };
@@ -98,6 +105,60 @@ impl VolumeMixerTrayIcon {
 
     fn on_right_mouse_pressed() {
         unsafe { PostQuitMessage(0) };
+    }
+
+    fn move_window_to_right_bottom_corner(hwnd: HWND) -> Result<(), String> {
+        let (window_width, window_height) = Self::get_window_size(hwnd)?;
+        let (desktop_width, desktop_height) = Self::get_desktop_size_without_taskbar()?;
+
+        let move_result = unsafe {
+            MoveWindow(
+                hwnd,
+                desktop_width - window_width,
+                desktop_height - window_height,
+                window_width,
+                window_height,
+                FALSE,
+            )
+        };
+        if let Err(err) = move_result.ok() {
+            Err(format!("MoveWindow failed: {}", err))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_window_size(hwnd: HWND) -> Result<(i32, i32), String> {
+        let mut window_rect = RECT::default();
+        let get_rect_result = unsafe { GetWindowRect(hwnd, &mut window_rect) };
+        if let Err(err) = get_rect_result.ok() {
+            Err(format!("GetWindowRect failed: {}", err))
+        } else {
+            Ok((
+                window_rect.right - window_rect.left,
+                window_rect.bottom - window_rect.top,
+            ))
+        }
+    }
+
+    fn get_desktop_size_without_taskbar() -> Result<(i32, i32), String> {
+        let mut desktop_rect = RECT::default();
+        let sysinfo_req_result = unsafe {
+            SystemParametersInfoA(
+                SPI_GETWORKAREA,
+                0,
+                Some(&mut desktop_rect as *mut _ as *mut c_void),
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS::default(),
+            )
+        };
+        if let Err(err) = sysinfo_req_result.ok() {
+            Err(format!("SystemParametersInfoA failed: {}", err))
+        } else {
+            Ok((
+                desktop_rect.right - desktop_rect.left,
+                desktop_rect.bottom - desktop_rect.top,
+            ))
+        }
     }
 }
 
